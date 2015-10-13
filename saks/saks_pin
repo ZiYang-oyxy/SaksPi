@@ -1,0 +1,39 @@
+BOARD BCM wiringPi
+LED排灯
+LED-D1 第1个LED（红） 24 8 10
+LED-D2 第2个LED（⻩） 26 7 11
+LED-D3 第3个LED（绿） 28 1 31
+LED-D4 第4个LED（绿） 27 0 30
+LED-D5 第5个LED（蓝） 35 19 24
+LED-D6 第6个LED（蓝） 33 13 23
+LED-D7 第7个LED（蓝） 31 6 22
+LED-D8 第8个LED（蓝） 29 5 21
+蜂鸣器 BUZZER-B1 有源蜂鸣器 23 11 14
+开关组
+KEY-K1 轻触开关（右） 16 23 4
+KEY-K2 轻触开关（左） 12 18 1
+KEY-K3 拨码开关（第1位） 18 24 5
+KEY-K4 拨码开关（第2位） 22 25 6
+4位数码管
+LED-A 数码管A段 40 21 29
+LED-B 数码管B段 36 16 27
+LED-C 数码管C段 35 19 24
+LED-D 数码管D段 31 6 22
+LED-E 数码管E段 29 5 21
+LED-F 数码管F段 38 20 28
+LED-G 数码管G段 37 26 25
+LED-H 数码管DP段（点） 33 13 23
+LED-COM1 数码管位选（1） 11 17 0
+LED-COM2 数码管位选（2） 13 27 2
+LED-COM3 数码管位选（3） 15 22 3
+LED-COM4 数码管位选（4） 19 10 12
+红外线单元
+IR-LED 红外线发射器 32 12 26
+IR-RECEIVER 红外线接收器 21 9 13
+温度传感器单元 DS18B20 DS18B20传感器 7 4 7
+串⼝单元
+UART-TXD 串⼝TXD 8 14 15
+UART-RXD 串⼝RXD 10 15 16
+I2C单元
+I2C-SDA I2C-SDA 3 2 8
+I2C-SLC I2C-SLC 5 3 9

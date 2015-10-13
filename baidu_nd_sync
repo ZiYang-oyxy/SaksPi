@@ -1,0 +1,256 @@
+#!/bin/bash
+
+set -e
+#set -x
+
+DIR=`readlink -f $(dirname $0)`
+
+BD_USER=xxx
+BD_PWD=xxx
+SMB_USER_PWD=xxx%yyy
+
+RC=0
+CHLD_PID_FILE=/tmp/pcs_upload.pid
+CHLD_PID=0
+TX_SPEED=0
+WAIT_SEC=0
+REMAIN_NUM=0     # 待传图片总数
+
+fini(){
+    log "Finish"
+    sudo cli -i 0 -t 0 -r 0
+    CHLD_PID=$(cat "$CHLD_PID_FILE")
+    if ps "$CHLD_PID" >/dev/null 2>&1; then
+        kill "$CHLD_PID"
+    fi
+    trap - EXIT
+    exit 0
+}
+
+log(){
+    logger -t "[bds]" $@
+    #echo "[bds] $@"
+}
+
+cal_tx_speed(){
+    iface="wlan0"
+    sleeptime="1"
+    txb=$(</sys/class/net/"$iface"/statistics/tx_bytes)
+    sleep "$sleeptime"
+    txbn=$(</sys/class/net/"$iface"/statistics/tx_bytes)
+    TX_SPEED=$(echo "$((txbn - txb)) / 1024 / ${sleeptime}" | bc )
+}
+
+show_speed(){
+    sudo cli -t 3 -i "$TX_SPEED" -r 0
+}
+
+show_process(){
+    sudo cli -t 2 -i "$REMAIN_NUM"
+}
+
+pcs_search(){
+    _path="$1"
+    _file="$2"
+    pcs search -r "$_path" "$_file" | awk --re-interval -v local_f="$_file" '
+    /^- / {
+        path = gensub(/^- *([^ ]+) ([^ ]+) ([^ ]+) (.+)$/, "\\4", "", $0)
+        match(path, /([^\/]+)$/, file)
+        if ( local_f == file[1] )
+            printf("%s\n", path)
+    }
+    '
+}
+
+pcs_compare(){
+    _local_f="$1"
+    _remote_f="$2"
+    if pcs compare "$_local_f" "$_remote_f" | awk '(NR==3) {print $0}' | grep "\->"; then
+        RC=0
+    else
+        RC=1
+    fi
+}
+
+pcs_upload(){
+    _local_f="$1"
+    _remote_f="$2"
+    _disp_count=5
+
+    pcs upload -f "$_local_f" "$_remote_f" & >/dev/null 2>&1
+    CHLD_PID=$!
+    echo $CHLD_PID > "$CHLD_PID_FILE"
+
+    _wait_sec=0
+    while true; do
+        if [[ $_disp_count -eq 0 ]]; then
+            show_process
+            _disp_count=5
+            sleep 2
+        else
+            cal_tx_speed
+            show_speed
+            _disp_count=$((_disp_count - 1))
+            sleep 1
+        fi
+
+        if ps "$CHLD_PID" >/dev/null 2>&1; then
+            _wait_sec=$((_wait_sec + 1))
+            # 上传时间过长且无上行速率，怀疑历程已经异常终止（如中途断网），故中断此次上传
+            if [[ "$_wait_sec" -gt 300 ]]; then
+                if [[ "$TX_SPEED" -le "5" ]]; then
+                    log "Upload interrupted!"
+                    sudo kill -9 "$CHLD_PID"
+                    RC=1
+                else
+                    _wait_sec=0
+                fi
+            fi
+        else
+            if pcs meta "$_remote_f" >/dev/null 2>&1; then
+                RC=0
+            else
+                RC=1
+            fi
+            break
+        fi
+    done
+}
+
+pcs_synch(){
+    _local_d="$1"
+    _remote_d="$2"
+
+    pcs synch -ru "$_local_d" "$_remote_d" & >/dev/null 2>&1
+    CHLD_PID=$!
+    echo $CHLD_PID > "$CHLD_PID_FILE"
+
+    _wait_sec=0
+    while true; do
+        cal_tx_speed
+        show_speed
+        sleep 1
+
+        if ps "$CHLD_PID" >/dev/null 2>&1; then
+            _wait_sec=$((_wait_sec + 1))
+            # 上传时间过长且无上行速率，怀疑历程已经异常终止（如中途断网），故中断此次上传
+            if [[ "$_wait_sec" -gt 300 ]]; then
+                if [[ "$TX_SPEED" -le "5" ]]; then
+                    log "Upload interrupted!"
+                    sudo kill -9 "$CHLD_PID"
+                    RC=1
+                else
+                    _wait_sec=0
+                fi
+            fi
+        else
+            _need_upload=$(pcs synch -rn "$_local_d" "$_remote_d" | awk --re-interval '
+            /Need Upload:/ {
+                print $6
+            }
+            ')
+            if [[ $_need_upload -eq 0 ]]; then
+                RC=0
+            else
+                RC=1
+            fi
+            break
+        fi
+    done
+}
+
+trap fini EXIT INT TERM
+
+log "Start: `date`"
+sudo cli -t 3 -i 0 -r 0
+
+export HOME=/home/pi
+
+if ! pcs who; then
+    log "Need login"
+    log "$BD_USER"
+    log "$BD_PWD"
+    pcs login --username="$BD_USER" --password="$BD_PWD"
+fi
+
+cd /home/shares/allusers/baidu_yun
+
+# clean up
+for f in `find . -name "*.slice"`; do
+    log "Remove $f"
+    rm -f $f
+done
+
+# pull files
+smbclient //192.168.31.102/samba_share -U "$SMB_USER_PWD" -c 'prompt OFF; recurse ON; cd '_sync'; lcd '/home/shares/allusers/baidu_yun/_sync/'; mget *; cd '../_photo_sync'; lcd '/home/shares/allusers/baidu_yun/_photo_sync/'; mget *;' &
+CHLD_PID=$!
+echo $CHLD_PID > "$CHLD_PID_FILE"
+
+wait
+
+################
+# sync my photos
+################
+log "Sync my photos"
+cd _photo_sync
+REMAIN_NUM=`ls | grep -c ""`
+SAVEIFS=$IFS
+IFS=$(echo -en "\n\b")
+for local_f in `ls`; do
+    log "Process file: $local_f"
+    files=`pcs_search /Photo "$local_f"`
+    if [ -z "$files" ]; then
+        pcs_upload "$local_f" "/_photo_sync/$local_f"
+        if [ "$RC" -eq 0 ]; then
+            log "Upload: -> /_photo_sync/$local_f"
+            log "Clean file: $_local_f"
+            rm "$local_f"
+        else
+            log "Upload Failed!"
+        fi
+        REMAIN_NUM=$((REMAIN_NUM - 1))
+    else
+        log "Find same name file: $remote_f"
+        for remote_f in $files; do
+            pcs_compare "$local_f" "$remote_f"
+            if [ $RC -eq 0 ]; then
+                pcs upload -f "$local_f" "$remote_f"
+                if [ $RC -eq 0 ]; then
+                    log "Upload: $local_f -> $remote_f"
+                else
+                    log "Upload Failed!"
+                    break
+                fi
+            else
+                # 不需要上传，设置RC确保能被清除
+                log "Don't upload"
+                RC=0
+            fi
+        done
+        if [ $RC -eq 0 ]; then
+            log "Clean file: $_local_f"
+            rm "$local_f"
+        fi
+        REMAIN_NUM=$((REMAIN_NUM - 1))
+    fi
+done
+IFS=$SAVEIFS
+cd ..
+
+
+###################
+# sync other files
+###################
+log "Sync other files"
+
+pcs_synch "_sync" "/_sync"
+if [ $RC -eq 0 ]; then
+    log "Sync other files done!"
+    rm -rf _sync/*
+else
+    log "Sync other files failed!"
+fi
+
+fini
+log "All Done: `date`"
+exit 0
