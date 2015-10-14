@@ -210,11 +210,11 @@ for local_f in `ls`; do
         fi
         REMAIN_NUM=$((REMAIN_NUM - 1))
     else
-        log "Find same name file: $remote_f"
         for remote_f in $files; do
+            log "Find same name file: $remote_f"
             pcs_compare "$local_f" "$remote_f"
             if [ $RC -eq 0 ]; then
-                pcs upload -f "$local_f" "$remote_f"
+                pcs_upload "$local_f" "$remote_f"
                 if [ $RC -eq 0 ]; then
                     log "Upload: $local_f -> $remote_f"
                 else
