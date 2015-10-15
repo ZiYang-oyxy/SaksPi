@@ -196,7 +196,7 @@ wait
 ################
 log "Sync my photos"
 cd _photo_sync
-REMAIN_NUM=`ls | grep -c ""`
+REMAIN_NUM=`ls -1 | wc -l`
 SAVEIFS=$IFS
 IFS=$(echo -en "\n\b")
 for local_f in `ls`; do
