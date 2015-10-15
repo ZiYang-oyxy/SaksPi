@@ -164,7 +164,7 @@ pcs_synch(){
 trap fini EXIT INT TERM
 
 log "Start: `date`"
-sudo cli -t 3 -i 0 -r 0
+cli -t 1 -r 1
 
 export HOME=/home/pi
 
@@ -184,6 +184,7 @@ for f in `find . -name "*.slice"`; do
 done
 
 # pull files
+cli -t 1 -r 8
 smbclient //192.168.31.102/samba_share -U "$SMB_USER_PWD" -c 'prompt OFF; recurse ON; cd '_sync'; lcd '/home/shares/allusers/baidu_yun/_sync/'; mget *; cd '../_photo_sync'; lcd '/home/shares/allusers/baidu_yun/_photo_sync/'; mget *;' &
 CHLD_PID=$!
 echo $CHLD_PID > "$CHLD_PID_FILE"
