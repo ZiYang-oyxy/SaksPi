@@ -5,9 +5,11 @@ set -e
 
 DIR=`readlink -f $(dirname $0)`
 
-BD_USER=xxx
-BD_PWD=xxx
-SMB_USER_PWD=xxx%yyy
+# get necessary variable
+#BD_USER=xxx
+#BD_PWD=xxx
+#SMB_USER_PWD=xxx%yyy
+source $DIR/.bds.config
 
 RC=0
 CHLD_PID_FILE=/tmp/pcs_upload.pid
