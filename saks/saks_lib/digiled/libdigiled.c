@@ -23,4 +23,6 @@ int dl_send_msg(char *msg)
         perror("write");
         return errno;
     }
+
+    close(sockfd);
 }

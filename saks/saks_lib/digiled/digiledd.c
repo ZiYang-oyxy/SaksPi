@@ -339,6 +339,8 @@ static bool get_next_connection(int fd)
         }
     }
 
+    close(client_fd);
+
     return true;
 }
 
